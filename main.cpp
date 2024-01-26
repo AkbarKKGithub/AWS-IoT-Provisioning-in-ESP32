@@ -5,63 +5,13 @@ char macAddressStr[18];
 int  off_time_real;
 
 int init_o_t;
- 
-float h ;
-float t;
+
 DynamicJsonDocument cert(4000);
 
 String chats="";
 WiFiClientSecure net = WiFiClientSecure();
 PubSubClient client(net);
 
-
-void flash(int x)
-{
-  if(x==1)
-  {
-    digitalWrite(Top_Led,HIGH);
-    delay(100);
-    digitalWrite(Top_Led,LOW);
-    delay(100);
-  }
-  else if(x==2)
-  {
-    digitalWrite(Fault_Led,HIGH);
-    delay(100);
-    digitalWrite(Fault_Led,LOW);
-    delay(100);
-  }
-   else if(x==3)
-  {
-    digitalWrite(Mid_Led,HIGH);
-    delay(100);
-    digitalWrite(Mid_Led,LOW);
-    delay(100);
-  }
-   else if(x==4)
-  {
-    digitalWrite(Dry_Led,HIGH);
-    delay(100);
-    digitalWrite(Dry_Led,LOW);
-    delay(100);
-  }
-  else
-  {
-  digitalWrite(Mid_Led, HIGH);
-  delay(100);
-  digitalWrite(Mid_Led, LOW);
-  delay(100);
-  }
-}
-
-inline void buz_tone(uint8_t x) {
-  for (int i; i < x; i++) {
-    digitalWrite(Buzzer, HIGH);
-    delay(30);
-    digitalWrite(Buzzer, LOW);
-    delay(100);
-  }
-}
 
 void readWiFiCredentials() {
   // Read SSID from EEPROM
@@ -136,7 +86,6 @@ void reconnectToWiFi(const String &ssid, const String &password) {
     delay(1000);
     read_button();
     Serial.println("Connecting to WiFi...");
-    flash(3);
   }
 
   Serial.println("Connected to WiFi");
@@ -182,8 +131,6 @@ void run_provisioning()
   {
     delay(1000);
     Serial.println("..");
-    flash(3);
-    flash(1);
     read_button();
   }
   }
@@ -194,82 +141,6 @@ void run_provisioning()
     Serial.println("Password: " + storedPassword);
     reconnectToWiFi(storedSSID, storedPassword);
   }
-
-}
-
-void updateStatus(String p_s)
-{
-  StaticJsonDocument<200> doc;
-  doc["p"] = p_s;
-  doc["o"] = "1";
-  char jsonBuffer[512];
-  serializeJson(doc, jsonBuffer); // print to client
-  String PUBTopic = String(macAddressStr) + "/status";
-  client.publish(PUBTopic.c_str(),jsonBuffer,true);
-}
-
-void chat(String msg)
-{
-     timeClient.update();
-     chats.concat(timeClient.getEpochTime()+msg+",");
-     int length = chats.length();
-     String limitedData;
-
-// Extract the last 59 characters
-if(length>70)
-    limitedData = chats.substring(length - 59, length);
-  else
-  limitedData=chats;
-  String PUBTopic = String(macAddressStr) + "/chats";
-     client.publish(PUBTopic.c_str(), limitedData.c_str(), true);
-}
-
-void pump_off()
-{
-  if(pump_flag==1)
-  {
-  digitalWrite(Pump,LOW);
-  buz_tone(2);
-  pump_flag=0;
-  chat("0");
-   off_time=off_time_real;
-   off_t_remains=0;
-   off_time =(off_time*60000)-(off_t_remains*60000);
-   
-  }
-}
-
-void pump_on()
-{
-  if(pump_flag==0)
-  {
-  Serial.print("ooon");
-  digitalWrite(Pump,HIGH);
-  off_time_millis=millis();
-  buz_tone(3);
-  pump_flag=1;
- // updateStatus("1");
-  chat("1");
-  off_t_remains=EEPROM.read(60);
-  Serial.println(off_t_remains);
-  off_time=off_time-(off_t_remains*60000);
-  }
-}
-
-void initialize_pin() {
-  pinMode(Top_Led, OUTPUT);
-  pinMode(Mid_Led, OUTPUT);
-  pinMode(Dry_Led, OUTPUT);
-  pinMode(Fault_Led, OUTPUT);
-  pinMode(Buzzer, OUTPUT);
-  pinMode(Pump, OUTPUT);
-  digitalWrite(Pump,LOW);
-
-  pinMode(33, INPUT);
-  pinMode(Top_sens, INPUT);
-  pinMode(Voltge_sens, INPUT);
-  pinMode(Push_button, INPUT);
-  pinMode(Dry_sens,INPUT);
 
 }
 
@@ -310,164 +181,6 @@ void updateFirmware() {
     Serial.println("Error from Update.isFinished(): " + 
       String(Update.getError()));
     return;
-  }
-}
-
-void auotOff()
-{
-     if (pump_flag==1)
-     {
-        Serial.print("off t=");
-        Serial.println((millis() - off_time_millis)/1000);
-        int o_t=(millis() - off_time_millis)/1000;
-        Serial.print("off timer=");
-        Serial.println(off_time/1000 );
-        if(o_t%60==0&&o_t>50)
-        {
-          EEPROM.write(60,off_t_remains+(o_t/60));
-          EEPROM.commit();
-          Serial.println(EEPROM.read(60));
-          //update time
-        }
-
-     }
-
-   if (pump_flag==1&&(millis() - off_time_millis > off_time || off_time_millis == 0))
-    {
-      EEPROM.write(60,0);
-      EEPROM.commit();
-      pump_off();
-      updateStatus("0");
-      Serial.println("Timer Exeeded");
-      chat("3");
-    }
-
-}
-
-int check_voltage()
-{
-  if(pump_flag==1)
-  {
-    return ((analogRead(34)+290)/10)-70;
-  }
-  else
-  {
-    return ((analogRead(34))/10)-70;
-  }
-}
-
-float check_current()
-{
-  float vl=0;
-   for(int i=0;i<20;i++)
-  {
-    vl=vl+analogRead(33);
-    delay(10);
-  }
-  vl=vl/20;
-    return vl/219;
-  
-}
-
-void volt_check() 
-{ 
-  //check volt h/l
- if(pump_flag==1||v_f==1)
-  {
-  if((check_voltage())<min_voltage||(check_voltage())>max_voltage)
-  {
-    flash(2);
-    v_error=v_error+2;
-     if(v_error>20)
-    v_error=20;
-  }
-  else
-  {
-    v_error--;
-    if(v_error<2)
-    v_error=0;
-  }
-  Serial.print("v_error=");
-     Serial.println(v_error);
-if(v_error>10&&v_f==0)
-{
-  pump_off();
-  delay(200);
-  updateStatus("0");
-  delay(200);
-  chat("5");
-  Serial.print("v_errour=");
-  Serial.println(v_error);
-
-  v_f=1;
-
-  Serial.println(off_time_min);
-}
-if(v_error<3&&v_f==1)
-{
-
-  pump_on();
-  delay(200);
-  updateStatus("1");
-  v_f=0;
-}
-  }
-}
-
-void dry_check() 
-{
-  //check volt h/l
- if(pump_flag==1)
-  {
-  if((check_current()<min_current||check_current()>max_current)&&check_current()>0)
-  {
-    c_error=c_error+2;
-     if(c_error>80)
-    c_error=80;
-    flash(4);
-  }
-  else
-  {
-    c_error--;
-    if(c_error<2)
-    c_error=0;
-  }
-  Serial.print("c_error=");
-     Serial.println(c_error);
-if(c_error>20)
-{
-  if(pump_flag==1)
-  {
-  EEPROM.write(60,0);
-  EEPROM.commit();
-  }
-  pump_off();
-  delay(200);
-  updateStatus("0");
-  delay(500);
-  chat("4");
-}
-  }
-}
-
-void pump_control() {
-  auotOff();
-  volt_check();
-  dry_check();
-
-  if (fault_flag==0) {
-    if (top_lvl_flag) {
-     // pump_off();  //disabled for sensor removal
-      sensor_e_c_flag = 1;
-    } else if (!top_lvl_flag && !mid_lvl_flag && !sensor_e_c_flag) {
-      // pump_on();
-    }
-    if (mid_lvl_flag)
-      sensor_e_c_flag = 0;
-  }
-  else
-  {
-
   }
 }
 
@@ -527,8 +240,6 @@ void messageHandler(char* topic, byte* payload, unsigned int length)
     ESP.restart();
   }
 
-  
-
   Serial.println("Received data: " + receivedData);
 
    String PUBTopic = String(macAddressStr) + "/chats";
@@ -548,7 +259,6 @@ void messageHandler(char* topic, byte* payload, unsigned int length)
           Serial.println(error.c_str());
           return;
         }
-
         // Extract values from the JSON object
         int val = jsonDocument["update"];
         if(val==1)
@@ -558,74 +268,6 @@ void messageHandler(char* topic, byte* payload, unsigned int length)
           ESP.restart();
         }
   }
- PUBTopic = String(macAddressStr) + "/vals";
-  if (strcmp(topic,PUBTopic.c_str()) == 0)
- {
-      DynamicJsonDocument jsonDocument(256);
-      DeserializationError error = deserializeJson(jsonDocument, receivedData);
-      // Check for errors during parsing
-      if (error) {
-        Serial.print(F("deserializeJson() failed: "));
-        Serial.println(error.c_str());
-        return;
-      }
-      // Extract values from the JSON object
-      off_time_real = jsonDocument["off_time"];
-      min_voltage = jsonDocument["min_volt"];
-      min_current = jsonDocument["min_current"];
-      max_current = jsonDocument["max_current"];
-      //off_time_real = jsonDocument["off_time"];
-      off_time=off_time_real;  
-   off_time =(off_time*60000);
-}
- PUBTopic = String(macAddressStr) + "/status";
-  if (strcmp(topic, PUBTopic.c_str()) == 0)
-  {
-    DynamicJsonDocument jsonDocument(256);
-    DeserializationError error = deserializeJson(jsonDocument, receivedData);
-
-    // Check for errors during parsing
-    if (error) {
-      Serial.print(F("deserializeJson() failed: "));
-      Serial.println(error.c_str());
-      return;
-    }
-
-    // Extract values from the JSON object
-    int pump = jsonDocument["p"];
-    int onl = jsonDocument["o"];
-    if(pump==1)
-    {
-      pump_on();
-    }
-    else if(pump==0)
-    {
-      if(pump_flag==1)
-      {
-        EEPROM.write(60,0);
-        EEPROM.commit();
-      }
-      pump_off();
-    }
-    if(onl==0)
-    {
-    StaticJsonDocument<200> doc;
-    pump_flag ? doc["p"] = "1" :doc["p"] = "0";
-    doc["o"] = "1";
-    char jsonBuffer[512];
-    serializeJson(doc, jsonBuffer); // print to client
-    PUBTopic = String(macAddressStr) + "/status";
-    client.publish(PUBTopic.c_str(),jsonBuffer,true);
-    StaticJsonDocument<200> doc1;
-    doc1["v"] = check_voltage();
-    doc1["a"] =check_current();
-    char jsonBuffer2[512];
-    serializeJson(doc1, jsonBuffer2); // print to client
-    PUBTopic = String(macAddressStr) + "/pow";
-    client.publish(PUBTopic.c_str(),jsonBuffer2,true);
-    }
-  }
-
 }
 
 void connectToAWS(DynamicJsonDocument cert)
@@ -691,48 +333,8 @@ void createCertificate()
   client.publish("$aws/certificates/create/json", "");
 }
 
-void connectAWS()
-{
-// {
-//   // Configure WiFiClientSecure to use the AWS IoT device credentials
-//   net.setCACert(AWS_CERT_CA);
-//   net.setCertificate(AWS_CERT_CRT);
-//   net.setPrivateKey(AWS_CERT_PRIVATE);
-
-  
- 
-//   // Connect to the MQTT broker on the AWS endpoint we defined earlier
-//   client.setServer(AWS_IOT_ENDPOINT, 8883);
- 
-//   // Create a message handler
-//   client.setCallback(messageHandler);
- 
-//   Serial.println("Connecting to AWS IOT");
- 
-//   while (!client.connect(THINGNAME))
-//   {
-//     Serial.print(".");
-//     delay(100);
-//   }
- 
-//   if (!client.connected())
-//   {
-//     Serial.println("AWS IoT Timeout!");
-//     return;
-//   }
- 
-//   // Subscribe to a topic
-//   client.subscribe("div/status");
-//   client.subscribe("div/chats");
-//   client.subscribe("div/ota"); 
-//   client.subscribe("div/vals"); 
-//   Serial.println("AWS IoT Connected!");
-} 
-
 void reconnect() {
   while (!client.connected()) {
-    flash(3);
-    flash(3);
      pump_control();
      delay(500);
   if(digitalRead(Push_button)==LOW)
@@ -773,12 +375,8 @@ void setup()
   esp_task_wdt_init(300, true);
   esp_task_wdt_add(NULL);
   EEPROM.begin(256);
-  digitalWrite(Buzzer,1);
-  delay(200);
-  digitalWrite(Buzzer,0);
   Serial.begin(115200);
   delay(1000);
-  off_t_remains=EEPROM.read(60);
   uint8_t mac[6];
   WiFi.macAddress(mac);
   Serial.println(off_t_remains);
@@ -822,13 +420,6 @@ void setup()
   {
     if (cert["certificatePem"])
     {
-    //    Serial.println("Certificate PEM:");
-    // Serial.println(cert["certificatePem"].as<String>());
-
-    // // You can also print the private key if needed
-    // Serial.println("Private Key:");
-    // Serial.println(cert["privateKey"].as<String>());
-
       connectToAWS(cert);
     }
   }
@@ -853,13 +444,7 @@ void loop()
   {
     reconnect();
   }
-  else
-  {
-    flash(1);
-  }
   client.loop();
-  pump_control();
   delay(1000);
-  
   read_button();
 }
