@@ -9,7 +9,7 @@ int init_o_t;
 DynamicJsonDocument cert(4000);
 
 String chats="";
-WiFiClientSecure net = WiFiClientSecure();
+WiFiClientSecure net = WiFiClientSecure(); // for connecting
 PubSubClient client(net);
 
 
